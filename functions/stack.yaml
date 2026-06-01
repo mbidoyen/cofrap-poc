@@ -1,0 +1,35 @@
+version: 1.0
+provider:
+  name: openfaas
+  gateway: http://127.0.0.1:8080
+functions:
+  generate-password:
+    lang: python3-http
+    handler: ./generate-password
+    image: dockerazariel/generate-password:latest
+    secrets:
+      - db-host
+      - db-name
+      - db-user
+      - db-password
+      - fernet-key
+  generate-2fa:
+    lang: python3-http
+    handler: ./generate-2fa
+    image: dockerazariel/generate-2fa:latest
+    secrets:
+      - db-host
+      - db-name
+      - db-user
+      - db-password
+      - fernet-key
+  authenticate:
+    lang: python3-http
+    handler: ./authenticate
+    image: dockerazariel/authenticate:latest
+    secrets:
+      - db-host
+      - db-name
+      - db-user
+      - db-password
+      - fernet-key
