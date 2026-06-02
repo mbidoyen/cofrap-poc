@@ -33,3 +33,13 @@ functions:
       - db-user
       - db-password
       - fernet-key
+  create-account:
+    lang: python3-http
+    handler: ./create-account
+    image: dockerazariel/create-account:latest
+    secrets:
+      - db-host
+      - db-name
+      - db-user
+      - db-password
+      - fernet-key
