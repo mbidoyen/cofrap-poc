@@ -15,4 +15,4 @@ faas-cli deploy -f stack.yaml
 Repos liés
 Infra : https://github.com/gmeline/mspr-2-infra
 Frontend : https://github.com/mbidoyen/mspr-2-backend
-EOF
+
