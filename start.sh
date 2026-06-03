@@ -69,16 +69,7 @@ kubectl rollout status statefulset/postgres -n data --timeout=120s
 echo ""
 echo ">>> Création de la table users..."
 sleep 5
-kubectl exec -i -n data postgres-0 -- psql -U cofrap_app -d cofrap << 'SQL'
-CREATE TABLE IF NOT EXISTS users (
-    id        SERIAL PRIMARY KEY,
-    username  VARCHAR(64)  UNIQUE NOT NULL,
-    password  TEXT         NOT NULL,
-    mfa       TEXT         NOT NULL,
-    gendate   BIGINT       NOT NULL,
-    expired   SMALLINT     DEFAULT 0
-);
-SQL
+kubectl exec -i -n data postgres-0 -- psql -U cofrap_app -d cofrap < k8s/users.sql
 
 # Port-forward gateway
 echo ""
