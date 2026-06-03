@@ -1,23 +1,10 @@
-# Secrets
 secrets.env
 *.key
-
-# Python
-__pycache__/
+pycache/
 *.pyc
 .venv/
 venv/
-
-# OpenFaaS (genere)
 build/
 template/
-
-# IDE
 .vscode/
 .idea/
-
-# OS
-.DS_Store
-Thumbs.db
-test-user.json
-test-user.json
