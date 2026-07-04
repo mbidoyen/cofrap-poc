@@ -1,0 +1,4 @@
+psycopg2-binary==2.9.9
+cryptography==42.0.5
+qrcode[pil]==7.4.2
+pyotp==2.9.0
