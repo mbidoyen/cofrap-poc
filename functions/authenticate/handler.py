@@ -7,33 +7,15 @@ et demande au frontend de relancer le processus de creation.
 import json
 import time
 
-import psycopg2
 import pyotp
-from cryptography.fernet import Fernet
 
+from _shared import read_secret, decrypt, db_connect
 
-# Duree de validite des identifiants en secondes (6 mois ~ 180 jours)
 EXPIRATION_SECONDS = 180 * 24 * 3600
 
 
-def read_secret(name):
-    with open(f"/var/openfaas/secrets/{name}", "r") as f:
-        return f.read().strip()
-
-
-def decrypt(token, key):
-    f = Fernet(key)
-    return f.decrypt(token.encode()).decode()
-
-
-def get_user(username):
-    """Retourne dict {password, mfa, gendate, expired} ou None si inexistant."""
-    conn = psycopg2.connect(
-        host=read_secret("db-host"),
-        dbname=read_secret("db-name"),
-        user=read_secret("db-user"),
-        password=read_secret("db-password"),
-    )
+def get_user(username: str):
+    conn = db_connect()
     try:
         with conn:
             with conn.cursor() as cur:
@@ -44,31 +26,17 @@ def get_user(username):
                 row = cur.fetchone()
                 if row is None:
                     return None
-                return {
-                    "password": row[0],
-                    "mfa": row[1],
-                    "gendate": row[2],
-                    "expired": row[3],
-                }
+                return {"password": row[0], "mfa": row[1], "gendate": row[2], "expired": row[3]}
     finally:
         conn.close()
 
 
-def mark_expired(username):
-    """Marque l'utilisateur comme expire (expired = 1)."""
-    conn = psycopg2.connect(
-        host=read_secret("db-host"),
-        dbname=read_secret("db-name"),
-        user=read_secret("db-user"),
-        password=read_secret("db-password"),
-    )
+def mark_expired(username: str) -> None:
+    conn = db_connect()
     try:
         with conn:
             with conn.cursor() as cur:
-                cur.execute(
-                    "UPDATE users SET expired = 1 WHERE username = %s",
-                    (username,),
-                )
+                cur.execute("UPDATE users SET expired = 1 WHERE username = %s", (username,))
     finally:
         conn.close()
 
@@ -83,9 +51,7 @@ def handle(event, context):
         if not username or not password or not totp_code:
             return {
                 "statusCode": 400,
-                "body": json.dumps({
-                    "error": "username, password and totp_code are required"
-                }),
+                "body": json.dumps({"error": "username, password and totp_code are required"}),
             }
 
         user = get_user(username)
@@ -93,17 +59,10 @@ def handle(event, context):
         if user is None:
             return {
                 "statusCode": 404,
-                "body": json.dumps({
-                    "error": f"user '{username}' not found",
-                    "action": "create_account"
-                }),
+                "body": json.dumps({"error": f"user '{username}' not found", "action": "create_account"}),
             }
 
-        # Verification expiration
-        now = int(time.time())
-        age = now - user["gendate"]
-
-        if user["expired"] == 1 or age > EXPIRATION_SECONDS:
+        if user["expired"] == 1 or (int(time.time()) - user["gendate"]) > EXPIRATION_SECONDS:
             mark_expired(username)
             return {
                 "statusCode": 403,
@@ -113,7 +72,6 @@ def handle(event, context):
                 }),
             }
 
-        # Dechiffrement
         fernet_key = read_secret("fernet-key").encode()
 
         try:
@@ -125,22 +83,12 @@ def handle(event, context):
                 "body": json.dumps({"error": "decryption failed (corrupted data or wrong key)"}),
             }
 
-        # Verification mot de passe
         if password != stored_password:
-            return {
-                "statusCode": 401,
-                "body": json.dumps({"error": "invalid password"}),
-            }
+            return {"statusCode": 401, "body": json.dumps({"error": "invalid password"})}
 
-        # Verification code TOTP
-        totp = pyotp.TOTP(totp_secret)
-        if not totp.verify(totp_code, valid_window=1):
-            return {
-                "statusCode": 401,
-                "body": json.dumps({"error": "invalid TOTP code"}),
-            }
+        if not pyotp.TOTP(totp_secret).verify(totp_code, valid_window=1):
+            return {"statusCode": 401, "body": json.dumps({"error": "invalid TOTP code"})}
 
-        # Tout est OK
         return {
             "statusCode": 200,
             "body": json.dumps({

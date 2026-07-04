@@ -5,6 +5,7 @@ pycache/
 .venv/
 venv/
 build/
+build-*/
 template/
 .vscode/
 .idea/

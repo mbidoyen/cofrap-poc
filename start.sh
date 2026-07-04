@@ -61,7 +61,7 @@ kubectl rollout status deployment/gateway -n openfaas --timeout=120s
 # Déployer PostgreSQL
 echo ""
 echo ">>> Déploiement de PostgreSQL..."
-kubectl apply -f k8s/postgres.yaml
+kubectl apply -f ../mspr-2-infra/k8s/postgres/postgres.yaml
 echo ">>> Attente que PostgreSQL soit prêt..."
 kubectl rollout status statefulset/postgres -n data --timeout=120s
 
@@ -83,7 +83,7 @@ SQL
 # Port-forward gateway
 echo ""
 echo ">>> Lancement du port-forward gateway..."
-kubectl port-forward -n openfaas svc/gateway 8080:8080 \
+kubectl port-forward -n openfaas svc/gateway 8888:8080 \
   --address 0.0.0.0 > /tmp/port-forward.log 2>&1 &
 sleep 3
 
@@ -92,7 +92,7 @@ echo ""
 echo ">>> Connexion à OpenFaaS..."
 PASSWORD=$(kubectl -n openfaas get secret basic-auth \
   -o jsonpath="{.data.basic-auth-password}" | base64 --decode)
-echo -n $PASSWORD | faas-cli login --username admin --password-stdin
+echo -n $PASSWORD | faas-cli login --username admin --password-stdin --gateway http://127.0.0.1:8888
 
 # Créer les secrets OpenFaaS
 echo ""
@@ -137,6 +137,6 @@ echo "  2. faas-cli build -f stack.yaml"
 echo "  3. faas-cli push -f stack.yaml"
 echo "  4. faas-cli deploy -f stack.yaml"
 echo ""
-echo "Gateway accessible sur : http://127.0.0.1:8080"
-echo "UI OpenFaaS : http://127.0.0.1:8080/ui/"
+echo "Gateway accessible sur : http://127.0.0.1:8888"
+echo "UI OpenFaaS : http://127.0.0.1:8888/ui/"
 echo ""

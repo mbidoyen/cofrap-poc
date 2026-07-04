@@ -23,6 +23,11 @@ functions:
       - db-user
       - db-password
       - fernet-key
+      - smtp-host
+      - smtp-port
+      - smtp-user
+      - smtp-password
+      - smtp-from
   authenticate:
     lang: python3-http
     handler: ./authenticate
@@ -43,3 +48,8 @@ functions:
       - db-user
       - db-password
       - fernet-key
+      - smtp-host
+      - smtp-port
+      - smtp-user
+      - smtp-password
+      - smtp-from

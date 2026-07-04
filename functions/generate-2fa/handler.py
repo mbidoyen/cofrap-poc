@@ -1,59 +1,34 @@
 """
-generate-2fa : genere un secret TOTP, le chiffre, le stocke en base,
-et retourne un QR code scannable par Google Authenticator / Authy.
+generate-2fa : génère (ou régénère) un secret TOTP pour un utilisateur existant,
+le chiffre avec Fernet, le stocke en base, puis envoie le QR code par email.
+Le QR code n'est JAMAIS renvoyé dans le corps de la réponse HTTP.
 """
 
-import base64
-import io
 import json
 import time
 
-import psycopg2
 import pyotp
-import qrcode
-from cryptography.fernet import Fernet
+
+from _shared import read_secret, encrypt, to_qr_base64, db_connect, send_email
 
 
-def read_secret(name):
-    with open(f"/var/openfaas/secrets/{name}", "r") as f:
-        return f.read().strip()
-
-
-def encrypt(plain, key):
-    f = Fernet(key)
-    return f.encrypt(plain.encode()).decode()
-
-
-def totp_uri_to_qr_base64(uri):
-    img = qrcode.make(uri)
-    buf = io.BytesIO()
-    img.save(buf, format="PNG")
-    return base64.b64encode(buf.getvalue()).decode("ascii")
-
-
-def user_exists(username):
-    conn = psycopg2.connect(
-        host=read_secret("db-host"),
-        dbname=read_secret("db-name"),
-        user=read_secret("db-user"),
-        password=read_secret("db-password"),
-    )
+def get_user_email(username: str):
+    """
+    Retourne l'adresse email de l'utilisateur, ou None si l'utilisateur n'existe pas.
+    """
+    conn = db_connect()
     try:
         with conn:
             with conn.cursor() as cur:
-                cur.execute("SELECT 1 FROM users WHERE username = %s", (username,))
-                return cur.fetchone() is not None
+                cur.execute("SELECT email FROM users WHERE username = %s", (username,))
+                row = cur.fetchone()
+                return row[0] if row else None
     finally:
         conn.close()
 
 
-def store_mfa(username, encrypted_mfa):
-    conn = psycopg2.connect(
-        host=read_secret("db-host"),
-        dbname=read_secret("db-name"),
-        user=read_secret("db-user"),
-        password=read_secret("db-password"),
-    )
+def store_mfa(username: str, encrypted_mfa: str) -> None:
+    conn = db_connect()
     try:
         with conn:
             with conn.cursor() as cur:
@@ -71,6 +46,27 @@ def store_mfa(username, encrypted_mfa):
         conn.close()
 
 
+def _email_body(username: str) -> str:
+    return f"""
+    <html><body style="font-family:Arial,sans-serif;color:#1E2761;">
+      <h2>Nouveau QR code 2FA — {username}</h2>
+      <p>Un nouveau secret TOTP a été généré pour votre compte COFRAP.<br/>
+      Scannez le QR code ci-dessous avec <strong>Google Authenticator</strong>,
+      <strong>Microsoft Authenticator</strong> ou <strong>Authy</strong>.</p>
+      <div style="text-align:center;padding:24px;">
+        <img src="cid:qr_totp" alt="QR 2FA" width="220" height="220"/>
+        <p style="font-size:12px;color:#6B7E8C;">
+          Après le scan, votre ancien code 2FA ne sera plus valide.
+        </p>
+      </div>
+      <p style="margin-top:24px;font-size:12px;color:#6B7E8C;">
+        Cet email est confidentiel. Ne le transmettez à personne.<br/>
+        Équipe COFRAP
+      </p>
+    </body></html>
+    """
+
+
 def handle(event, context):
     try:
         payload = json.loads(event.body)
@@ -80,33 +76,46 @@ def handle(event, context):
             return {
                 "statusCode": 400,
                 "body": json.dumps({"error": "username is required"}),
+                "headers": {"Content-Type": "application/json"},
             }
 
-        if not user_exists(username):
+        # Récupération de l'email depuis la base (vérifie aussi que l'utilisateur existe)
+        email = get_user_email(username)
+        if email is None:
             return {
                 "statusCode": 404,
                 "body": json.dumps({
-                    "error": f"user '{username}' not found. Run generate-password first."
+                    "error": f"Utilisateur '{username}' introuvable. Créez d'abord un compte via create-account."
                 }),
+                "headers": {"Content-Type": "application/json"},
             }
 
+        # --- Génération du nouveau secret TOTP ---
         totp_secret = pyotp.random_base32()
-        totp = pyotp.TOTP(totp_secret)
-        uri = totp.provisioning_uri(name=username, issuer_name="COFRAP")
-
-        qr_b64 = totp_uri_to_qr_base64(uri)
+        uri = pyotp.TOTP(totp_secret).provisioning_uri(name=username, issuer_name="COFRAP")
+        qr_b64 = to_qr_base64(uri)
 
         fernet_key = read_secret("fernet-key").encode()
         encrypted = encrypt(totp_secret, fernet_key)
-
         store_mfa(username, encrypted)
+
+        # --- Envoi du QR code par email (jamais dans la réponse HTTP) ---
+        send_email(
+            to_addr=email,
+            subject=f"[COFRAP] Votre nouveau QR code 2FA — {username}",
+            body_html=_email_body(username),
+            images=[
+                {"cid": "qr_totp", "data_b64": qr_b64},
+            ],
+        )
 
         return {
             "statusCode": 200,
             "body": json.dumps({
-                "username": username,
-                "qrcode_base64": qr_b64,
-                "message": "2FA secret generated. Scan the QR code with Google Authenticator or Authy."
+                "message": (
+                    f"Secret 2FA régénéré pour '{username}'. "
+                    "Le QR code a été envoyé à l'adresse email enregistrée."
+                )
             }),
             "headers": {"Content-Type": "application/json"},
         }
@@ -115,4 +124,5 @@ def handle(event, context):
         return {
             "statusCode": 500,
             "body": json.dumps({"error": str(e)}),
+            "headers": {"Content-Type": "application/json"},
         }
