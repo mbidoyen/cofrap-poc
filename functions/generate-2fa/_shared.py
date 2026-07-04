@@ -70,6 +70,9 @@ def send_email(to_addr: str, subject: str, body_html: str, images: list = None) 
 
     with smtplib.SMTP(smtp_host, smtp_port) as server:
         server.ehlo()
-        server.starttls()
-        server.login(smtp_user, smtp_password)
+        # STARTTLS + login uniquement si un mot de passe est configuré
+        # (désactivé avec MailHog qui n'exige ni TLS ni authentification)
+        if smtp_password:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
         server.sendmail(smtp_from, [to_addr], msg.as_string())

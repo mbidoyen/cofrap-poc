@@ -13,6 +13,11 @@ functions:
       - db-user
       - db-password
       - fernet-key
+      - smtp-host
+      - smtp-port
+      - smtp-user
+      - smtp-password
+      - smtp-from
   generate-2fa:
     lang: python3-http
     handler: ./generate-2fa

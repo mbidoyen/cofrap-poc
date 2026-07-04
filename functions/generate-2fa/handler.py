@@ -9,7 +9,7 @@ import time
 
 import pyotp
 
-from _shared import read_secret, encrypt, to_qr_base64, db_connect, send_email
+from ._shared import read_secret, encrypt, to_qr_base64, db_connect, send_email
 
 
 def get_user_email(username: str):
